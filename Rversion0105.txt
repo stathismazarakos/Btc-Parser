@@ -1,0 +1,5 @@
+Rversion 0105 changelog
+1.Removed h2d call in readVariantInteger with 0x..
+2.Removed as.integer in ReadBlockchainfile function
+3.Commented lined in readVariantInteger
+4.readVariantInteger removed variables (rbits , vbytes)

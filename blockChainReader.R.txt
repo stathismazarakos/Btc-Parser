@@ -1,0 +1,647 @@
+
+########################################################################################
+#                                                                                      #  
+#                                                                                      #  
+# version: 0.0.1                                                                       #  
+# Realease date: 28/03/2018                                                            #  
+# Authors: tzagara@upatras.gr                                                          #
+#                                                                                      #        
+# This script reads Bitcoin's blockchain files (blkxxxxx.dat files), parses them and   #
+# outputs some informations about the blocks and transactions                          #
+#                                                                                      #
+# NOTE: The aim of this script is just to play around and get a feeling of how         #
+# blockchain files are structured                                                     #
+#                                                                                      #
+#                                                                                      #  
+########################################################################################
+
+
+
+
+
+
+#
+# Please make sure you have installed the following R packages
+#
+library(tictoc) # for timing purposes - TODO: maybe another timing package?
+library(PKI) #has raw2hex BUT IS OBSOLETE NOW!
+library(openssl) # for sha256()
+library(broman) # for strftime()
+
+
+
+
+# define constants
+# TODO: do we really need these?
+SIZEOFINT<-4
+SIZEOFCHAR<-1
+SIZEOFHEADER<-80
+
+
+
+# define error codes
+# TODO: do we really need these?
+E_INVVARVALUE <- -10
+
+# Make above variables constants i.e. make them immutable (i.e. you'll not be able to change their value in the code below)
+lockBinding("SIZEOFINT", globalenv())
+lockBinding("SIZEOFCHAR", globalenv())
+lockBinding("SIZEOFHEADER", globalenv())
+lockBinding("E_INVVARVALUE", globalenv())
+
+
+
+################################################################
+#
+# Some helper functions
+# 
+# 
+#
+#
+#
+################################################################
+
+
+
+
+# h2d
+# 
+# Converts an number in hexadecimal (base=16) into its decimal representation
+#
+# @hx: a string (character vector) representing a number in hexadecimal
+# quick, but ugly and dirty, and FUCK YOY R!
+#
+# Return values: the hexadecimal input hx in its decimal representation or error if input contains 
+# character that's not valid in hexadecimal
+# 
+# TODO: As said: this is ugly and inefficient. Optimize me!
+#
+h2d<-function(hx){
+    
+   lhx <- tolower(hx)
+   l<-nchar(lhx)
+   val <- 0
+     
+    # powers
+    p<-0
+    parts <- strsplit(lhx, "")[[1]]
+     
+    for( c in l:1 ){
+         if (parts[c] == 'a') {
+             val<-val + 10*16^p
+         } else if (parts[c] == 'b') {
+                    val<-val + 11*16^p
+         } else if (parts[c] == 'c'){
+                    val<-val + 12*16^p
+         }else if (parts[c] == 'd'){
+                     val<-val + 13*16^p
+         } else if (parts[c]=='e'){
+                     val<-val + 14*16^p
+         }else if (parts[c]=='f'){
+                     val<-val + 15*16^p
+         } else if (parts[c] == '0'){
+                    val<-val + 0*16^p
+         } else if (parts[c] == '1'){
+                    val<-val + 1*16^p
+         } else if (parts[c]=='2'){
+                    val<-val + 2*16^p
+         } else if (parts[c]=='3'){
+                     val<-val + 3*16^p
+         } else if (parts[c]=='4'){
+                      val<-val + 4*16^p
+         }else if (parts[c]=='5'){
+                      val<-val + 5*16^p
+         }else if (parts[c]=='6'){
+                   val<-val + 6*16^p
+         }else if (parts[c]=='7'){
+                   val<-val + 7*16^p
+         }else if (parts[c]=='8'){
+                   val<-val + 8*16^p
+         }else if (parts[c]=='9'){
+                  val<-val + 9*16^p
+         } else 
+              stop( sprintf("[ERROR] Invalid hexadecimal element [%s] in hex number",parts[c]) )
+         
+         #next power
+         p<- p + 1
+    }
+     
+     return(val)
+}
+
+
+
+
+
+
+
+################################################################
+#
+# Functions for reading binary files
+# 
+# 
+#
+#
+#
+################################################################
+
+#
+# readInteger
+#
+# Read integers from a file.
+#
+# @f : a connection object i.e. a handle to an open file
+# @numIntegers: number of integers to read
+#
+# Return values: a vector with the specified amount of integers from file f
+# TODO: what should happen if less than numIntegers are read
+#
+readInteger<-function(f, numIntegers) {
+  
+  intVector <- readBin(f, "integer",  n=numIntegers,  size=SIZEOFINT, signed=TRUE, endian="little")
+  return(intVector)
+}
+
+
+#
+# readBytes
+#  
+# Read bytes (raw) from an open file and return the bytes as a vector
+#
+# @f : a connection object i.e. a handle to an open file
+# @numBytes: the number of bytes to read from file f
+#
+# Return values: vector of raw. If fewer than numBytes bytes or 0 bytes were red, an error is displayed.
+#
+# TODO: Function stops if the less than the required number of bytes have bee red from the file. This must change!
+#
+readBytes<-function(f, numBytes){
+  
+  
+  bts <- readBin(f, raw(),  n=numBytes,  size=1)
+  
+  # Have we reached the end of file?
+  # TODO: check if this condition indicates eof
+  if (length(bts) == 0){
+      stop( "[ERROR] Zero (0) bytes read from file." )  
+  }
+  
+  # Ok we have read something. But if we read less bytes than requested (numBytes) 
+  # this also may mean that we reached end of file i.e. nothing more there.
+  if (length(bts) != numBytes) {
+      stop( sprintf("BCR:::Error reading [%d] bytes. Got [%d] bytes", as.integer(numBytes), length(bts) ) )
+  }
+  
+  return(bts)
+} 
+
+
+#
+# readVariantInteger
+#
+# Reads a variant integer from a file i.e. an integer of variable length bytes
+#
+# @f: a connection object i.e. a handle to an open file
+# 
+# Return value: an integer (returned as float to prevent overflow). If an invalid 
+# integer is detected, an fatal error is generated i.e. the script halts
+# 
+# Notes:
+# The function reads 1, 3, 5 or 9 bytes from  file f.  
+# Initially, it reads 1 byte and depending on the value reads
+# the 2, 4 or 8 next bytes. In particular:
+# if first byte is smaller than 0xfd if returns the first bytes
+# if first byte is equal to fd it reads returns the next 2 bytes as an integer
+# if first byte is equal to fe it reads returns the next 4 bytes as an integer
+# if first byte is equal to ff it reads returns the next 8 bytes as an integer
+#
+# TODO: Optimize this. There are a lot of redundant variables here.
+
+readVariantInteger<-function(f){
+  
+      # Read first byte. This will tell us how many next bytes to read    
+      rawvec <-readBytes(f, 1)[1]
+      rbits<-rawToBits(rawvec)
+      sz<-sum(2^.subset(0:7, as.logical(rawToBits(rawvec))))
+          
+      # TODO: better way than h2d("fd") to avoid function call? i.e. check to see if
+      # comparing integers and hexadecimals like this sz < 0xfd is possible in R (it should, but need to make sure).
+      if (sz < h2d("fd") ){
+            return(sz)
+      } else {
+                    if (sz == h2d("fd"))  {
+                        tmpSz <- readBytes(f, 2)
+                        # Convert 16-bit binary integer into decimal
+                        nSz<-sum(2^.subset(0:15, as.logical(rawToBits(tmpSz))))
+                        
+                        # TODO: Remove the next lines
+                        tmpSz <- raw2hex( rev(tmpSz) )
+                        tmpSz<-h2d( paste(tmpSz, collapse="") )
+                        
+                        return ( nSz )
+                    } else if (sz == h2d("fe")){
+                                tmpSz <- readBytes(f, 4)
+                                rbits<-rawToBits( rev(tmpSz))
+                                # Convert 32-bit binary integer into decimal
+                                nSz<-sum(2^.subset(0:31, as.logical(rawToBits(rbits))))
+                                
+                                # TODO: Remove the next lines
+                                tmpSz <- raw2hex( rev(tmpSz) )
+                                tmpSz<-h2d( paste(tmpSz, collapse="") )
+                                
+                                return ( nSz  )
+                    } else if (sz == h2d("ff")) {
+                                tmpSz <- readBytes(f, 8)
+                                rbits<-rawToBits( rev(tmpSz) )
+                                # Convert 64-bit binary integer into decimal
+                                nSz<-sum(2^.subset(0:63, as.logical(rawToBits(rbits))))
+                                return ( nSz  )
+                    }
+          }
+  
+          stop( sprintf("[ERROR] Invalid first byte [%f] for variant integer", sz) )
+}
+
+
+
+#
+# This reads ONLY strings from a file. 
+# Strings MUST BE NULL TERMINATED! If not, don;t use this function.
+# TODO: check/fix me.
+readString<-function(f, numStrings, maxChars, debug=FALSE) {
+  
+  if (debug)
+    print( sprintf("readString: calling with paramereters: numStrings=%d, maxChars=%d", numStrings, maxChars))
+  
+  stringsVector <- c()
+  for (i in 1:numStrings) {
+    str <- readBin(f, "character", n=1, size=maxChars*SIZEOFCHAR)
+    if (debug)
+      print( sprintf("readString: Read: %s", str[1]))
+    if (nchar(str[1]) != maxChars) {
+      rest <-maxChars - nchar(str[1]) - 1
+      if (debug)
+        print( sprintf("readString: reading garbage of size %d (actual read:%d)", rest, nchar(str[1])))
+      
+      garbage <- readBin(f, "raw", n=rest, size=1 )
+    }
+    stringsVector <- c(stringsVector, str)
+  }
+  
+  return(stringsVector)
+}
+
+
+
+
+
+################################################################
+#
+# Below starts the section with functions that read 
+# blkxxxxxx.dat according to the structure 
+# of the blockchain
+#
+#
+#
+################################################################
+
+
+#
+# readBlockChainFile
+#
+# Open a blockchain file (i.e. a blkxxxxxx.dat file) and read it block by block
+#
+# @blockfile: (string) the full path to the blockchain .dat file
+# @maxBlocks: (integer) maximum number of blocks to read. Value -1 means all blocks found in file. Default -1
+# @saveBlocksToFile: (boolean) whether or not to save blocks to a .txt file. For debugging purposes only!
+# @outFile: if saveBlocksToFile is TRUE in which file to store blocks. Defaults to "blocks.txt"
+#
+# Return values: nothing (yet!)
+#
+# TODO: This function is unfinished. Still don't know how to finish it.
+#
+readBlockChainFile<-function(blockfile, maxBlocks=-1, saveBlocksToFile=FALSE, outFile="blocks.txt"){
+                    
+                    # Open the file  
+                    bF <- file(blockfile, "rb")
+                    
+                    blocks<- c()
+                    blockCounter<-0L
+                    
+                    # To infinity and beyond...
+                    while (TRUE){
+                         
+                         aBlock<-list()
+                         
+                         # Read the block
+                         aBlock<-readBlock(bF)
+                         
+                         # increase number of blocks read
+                         blockCounter<-blockCounter + 1
+                         
+                         # Display the block that we just red, to make sure everything is ok.
+                         print( sprintf("**********   NEW BLOCK %d (Height????: %d)  ********************", as.integer(blockCounter), as.integer(blockCounter-1)) )
+                         print(sprintf("Magic number: %s", aBlock$magicNumber))
+                         print(sprintf("Block hash: %s", aBlock$calcBlockHash))
+                         print(sprintf("Block size: %d bytes", as.integer(aBlock$blockSize)))
+                         print(sprintf("Block time: %s", aBlock$blockTime))
+                         print(sprintf("Previous hash: %s", aBlock$previousHash))
+                         print(sprintf("Nonce: %f", h2d(aBlock$nonce) ) )
+                         print(sprintf("Transaction count: %d ", as.integer(aBlock$TxCount)))
+                         print("*******************************************")
+                         
+                         # Should we save the blocks to a file, in a human readable format?
+                         # TODO: Find a better way to save such info
+                         if( saveBlocksToFile ) {
+                               write(sprintf("**********   NEW BLOCK %d (Height????: %d)  ********************", as.integer(blockCounter), as.integer(blockCounter-1)), outFile, append=TRUE)
+                               write(sprintf("Magic number: %s", aBlock$magicNumber), outFile, append=TRUE)
+                               write(sprintf("Block hash: %s", aBlock$calcBlockHash), outFile, append=TRUE)
+                               write(sprintf("Block size: %d bytes", as.integer(aBlock$blockSize)), outFile, append=TRUE)
+                               write(sprintf("Block time: %s", aBlock$blockTime), outFile, append=TRUE)
+                               write(sprintf("Previous hash: %s", aBlock$previousHash), outFile, append=TRUE)
+                               write(sprintf("Nonce: %f", h2d(aBlock$nonce) ), outFile, append=TRUE )
+                               write(sprintf("Transaction count: %d ", as.integer(aBlock$TxCount)), outFile, append=TRUE)  
+                               write("***************************************************", outFile, append=TRUE)
+                         }
+                         
+                         # Have we reached maximum number of blocks to read and if so, stop?
+                         if ( as.integer(maxBlocks) > 0 ) {
+                              if ( blockCounter >= as.integer(maxBlocks) )
+                                   break # yes! Bailout of while loop
+                         }
+                              
+                    } # while
+                    
+                    # Important! Cleanup, i.e. close the file we opened.
+                    close(bF)
+                    
+                    #TODO: return the proper structure containing the requested files.
+                    #return(blocks)
+}
+
+
+#
+# readBlock
+#
+# Read an entire block from file
+#
+# @f: a connection object i.e. a handle to an open file
+#
+# Return values: the block header and the transactions.
+# TODO: some redundant stuff here...needs optimization. Also needs better testing as to whether
+# transactions are returned appropriately
+#
+readBlock<-function(f){
+  
+            # Initialization - for testing purposes
+            blkSize<- -9999
+            
+            # Read magic number (=4 bytes)
+            m<-readBytes(f, 4) 
+            
+            # Convert binary number into decimal.
+            # That's not useful/needed and we should get rid of it - but anyway 
+            mv<-sum(2^.subset(0:31, as.logical(rawToBits(m))))
+            
+            # Read size of block - in bytes
+            bSzBytes<-readBytes(f, 4)
+            bSz<-sum(2^.subset(0:31, as.logical( rawToBits(bSzBytes))))
+            
+            # There is one block in file blk00000.dat that looks very strange: has size=0, magic number=0 etc.
+            # Here we just print our if we have encountered such block.
+            # However, we need to read that block.
+            # TODO: Take a closer at this block. Why is it there? Is this normal? 
+            if (bSz == 0){
+                print(sprintf(">>>> Zero byte block! (%d)", blkSize))   
+            }
+            
+            # Read block header
+            blockHeader<-list()
+            blockHeader<-readHeader(f)
+            
+            # Read all transactions and add them to a list
+            blockTx<-list()
+            for (k in 1:blockHeader$TxCount ){
+                   txn<-readTx(f)
+                   blockTx<-c(blockTx, txn)
+            }
+            
+            
+            blockHeader<-c(blockHeader, "magicNumber" = paste(rev(m),collapse="") )
+            blockHeader<-c(blockHeader, "blockSize"=bSz)
+            blockHeader<-c(blockHeader, "transactions"=blockTx)
+            
+            return(blockHeader)
+  
+}
+
+
+#
+# readHeader
+#
+# Read the header of the block (80 bytes)
+#
+# @f: a connection object i.e. a handle to an open file
+#
+# Return values: a list containing the block header. 
+#
+# This function calculates also the current block's hash using sha256.
+#
+# TODO: some redudancies here. Optimize/improve it.
+#
+readHeader<-function(f){
+  
+             
+             blkHeader<- "" # TODO: do we need this? don't know. sigh....
+             
+             # Headers are always 80 bytes in size. Read an entire chunk of 80 bytes
+             # and "break" it apart to get the various parts. It's in memory and hence faster.
+             blkHeader<- readBytes(f, 80)
+             
+             # Calculate the blocks hash. 
+             # For this we pass the block header bytes into sha256 resulting in a 256bit number and pass
+             # that 256 number again into sha256. The result will be the block's hash value.
+             #
+             # NOTE: You may use this hash value to check the block data by comparing the data read from file with  
+             # data that blockchain.info maintains for a block. To do this, take blockHash value and paste the hash value
+             # into the following URL:
+             # https://blockchain.info/block/<paste-block-hash-value-here>
+             # You should see the block data as maintained by blockchain.info and compare it with the data this script reads
+             #
+             blockHash<-sha256( sha256(blkHeader) )
+             
+             
+             # Now, chop off the various parts from the 80 bytes (=header) that we have read.
+             # TODO: a lot of redundant variables below. Need to improve/optimize this
+             
+             # Chop off version
+             # Reverse bits because of little-endian format 
+             # For more on the endianness discussion see https://el.wikipedia.org/wiki/Endianness
+             vVec <- rev(blkHeader[1:4])
+             version<-paste(vVec, collapse="")
+             
+             # Chop off previous hash
+             # Reverse bits because of little-endian format
+             prVec <- rev(blkHeader[5:36])
+             previousHash <- paste(prVec, collapse="")
+             
+             # Chop off merkle hash
+             # Reverse bits because of little-endian format
+             mrklVec <- rev(blkHeader[37:68])
+             merkleRoot <- paste(mrklVec, collapse="")
+             
+             # Chop off block timestamp
+             # We reverse the timestamp bits because integers are stored in little-endian format
+             tmVec <-rev(blkHeader[69:72])
+             
+             # Chop off timestamp
+             # The block's timestamp (=when it was created) is an integer representing an Unix timestamp (see https://en.wikipedia.org/wiki/Unix_time) 
+             # This integer is the time elapsed in seconds from 01-01-1970, a date known as "the Epoch"
+             # So here we convert the Unix timestamp integer into a datetime. The block reports the timestamp in GMT, hence we do the same here.
+             timeStamp <- as.POSIXct( hex2dec(paste(tmVec, collapse="")), origin="1970-01-01")
+             timeStampH <- strftime(timeStamp, "%d/%m/%Y %H:%M:%S", tz="GMT") 
+             
+             # NOTE: Not the actual difficulty but the difficulty bits representing difficulty
+             # To see how to convert that number (difficulty bits) into difficulty, see https://en.bitcoin.it/wiki/Difficulty 
+             diffVect  <- rev(blkHeader[73:76])
+             difficulty <- paste(diffVect, collapse="")
+             
+             
+             # Chop off nonce (i.e. the value that miners search for in order to solve the hash puzzle)
+             nonceVec <- rev(blkHeader[77:80])
+             nonce <- paste(nonceVec, collapse="")
+             
+             # Number of transactions in this block
+             txCount<- -2
+             txCount <- readVariantInteger(f)
+             if (is.na(txCount)) {
+                txCount<-1 #we do this for the strange block with all zeroes so that we don't go berzerk.
+             }
+             
+             # Note: please note below that we reverse the blockHash, as it is calculated and displayed in little-endian.
+             hdr<-list("calcBlockHash"= paste(rev(blockHash), collapse=""), "version"=version, "previousHash"= previousHash, 
+                       "merkleRoot"=merkleRoot, 
+                       "blockTime"=timeStampH, "difficultyBits"=difficulty, "nonce"=nonce, "TxCount"=txCount)
+             
+             hdr<-c(hdr, "error" = 0)
+             
+             return(hdr)
+  
+}
+
+
+
+#
+# readTx
+#
+# Read one (1) transaction including all its inputs and outputs
+#
+# @f: a connection object i.e. a handle to an open file
+#
+# Return values: a list containing the inputs and outputs of that transaction
+#
+# TODO: redundant variables. Optimize it.
+#
+readTx<-function(f){ 
+  
+         # Transaction version
+         txVersionNumberV<-readBytes(f, 4)
+         
+         # Not needed but anyway
+         txVersion<-sum(2^.subset(0:31, as.logical( rawToBits(txVersionNumberV))))
+         
+         ### Read Tx inputs
+         
+         # How many inputs does the transaction have?
+         txInputCount<-readVariantInteger(f)
+         
+         # Iterate through all inputs, read them and put them in
+         # a vector.
+         inTxs<-c()
+         for (p in 1:txInputCount){
+              txIn<-readTxInput(f)
+              append(inTxs, txIn)
+         }
+         
+         ### Read Tx outputs
+         
+         # How many outputs does the transaction have?
+         txOutCount<-readVariantInteger(f)
+         
+         # Iterate through all outputs, read them and put them in
+         # a vector.
+         outTxs<-c()
+         for (p in 1:txOutCount){
+              txOut<-readTxOutput(f)
+              append(outTxs, txOut)
+         }
+    
+         
+         # The last piece of the transaction to read is the locktime. Read it and we are done.
+         
+         lckTm<-readBytes(f, 4)
+         #Next is unnecessary, but anyway...
+         lockTime<-sum(2^.subset(0:31, as.logical( rawToBits(lckTm))))
+         
+         return( list("txInputs"=inTxs, "txOutputs"=outTxs) )
+}
+
+
+#
+# readTxInput
+#
+# Read one (1) INPUT of a transaction 
+#
+# @f: a connection object i.e. a handle to an open file
+#
+# Return values: a list containing ONE INPUT in a transaction
+#
+# TODO: redundant variables. Optimize it.
+#
+readTxInput<-function(f){
+  
+              txHash<-readBytes(f, 32)
+              outIdx<-readBytes(f, 4)
+              
+              scriptLen<-readVariantInteger(f)
+              unlockScript<-readBytes(f, scriptLen)
+              
+              seqNo<-readBytes(f, 4)
+              
+              return(list("txInputHash"=txHash, "txInputOutIdx"=outIdx, "txInScriptLen"=scriptLen, "txInScript"=unlockScript, "txInSequence"=seqNo))
+}
+
+
+#
+# readTxOutput
+#
+# Read one (1) OUTPUT of a transaction 
+#
+# @f: a connection object i.e. a handle to an open file
+#
+# Return values: a list containing ONE OUTPUT found in a transaction
+#
+# TODO: redundant variables. Optimize it.
+#
+readTxOutput<-function(f){
+  
+              # Amount of transaction, in Satoshis. 
+              # Note: 1 bitcoin = 100000000 Satoshis
+              txA<-readBytes(f, 8)
+              txAmount<-sum(2^.subset(0:63, as.logical( rawToBits(txA))))
+              
+              outScriptLen<-readVariantInteger(f)
+              outScript<-readBytes(f, outScriptLen)
+              return(list("txOutAmount"=txAmount, "txOutScriptLength"=outScriptLen, "txOutScript"=outScript))
+}
+
+
+
+#
+# For testing purposes: Call readBlockChainFile to read the blocks that reside in one file.
+#
+readBlockChainFile("C:\\home\\users\\tzag\\MyCode\\BlockChainReader\\bc-sample\\blk00000.dat", 
+                    299, 
+                    TRUE, 
+                    "C:\\home\\users\\tzag\\MyCode\\BlockChainReader\\BlockchainBlocks.txt") 
+

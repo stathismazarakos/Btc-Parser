@@ -733,45 +733,45 @@ readHeader<-function(f){
   
   # Now, chop off the various parts from the 80 bytes (=header) that we have read.
   # TODO: a lot of redundant variables below. Need to improve/optimize this
-  
+  #variable reduction 1505
   # Chop off version
   # Reverse bits because of little-endian format 
   # For more on the endianness discussion see https://el.wikipedia.org/wiki/Endianness
-  vVec <- rev(blkHeader[1:4])
-  version<-paste(vVec, collapse="")
+  #vVec <- rev(blkHeader[1:4])
+  version<-paste(rev(blkHeader[1:4]), collapse="")
   
   # Chop off previous hash
   # Reverse bits because of little-endian format
-  prVec <- rev(blkHeader[5:36])
-  previousHash <- paste(prVec, collapse="")
+  #prVec <- rev(blkHeader[5:36])
+  previousHash <- paste(rev(blkHeader[5:36]), collapse="")
   
   # Chop off merkle hash
   # Reverse bits because of little-endian format
-  mrklVec <- rev(blkHeader[37:68])
-  merkleRoot <- paste(mrklVec, collapse="")
+  #mrklVec <- rev(blkHeader[37:68])
+  merkleRoot <- paste(rev(blkHeader[37:68]), collapse="")
   
   logdebug("Merkle root: [%s]", paste(merkleRoot, collapse=""), logger='btc.bcreader')
   
   # Chop off block timestamp
   # We reverse the timestamp bits because integers are stored in little-endian format
-  tmVec <-rev(blkHeader[69:72])
+  #tmVec <-rev(blkHeader[69:72])
   
   # Chop off timestamp
   # The block's timestamp (=when it was created) is an integer representing an Unix timestamp (see https://en.wikipedia.org/wiki/Unix_time) 
   # This integer is the time elapsed in seconds from 01-01-1970, a date known as "the Epoch"
   # So here we convert the Unix timestamp integer into a datetime. The block reports the timestamp in GMT, hence we do the same here.
-  timeStamp <- as.POSIXct( hex2dec(paste(tmVec, collapse="")), origin="1970-01-01")
+  timeStamp <- as.POSIXct( hex2dec(paste(rev(blkHeader[69:72]), collapse="")), origin="1970-01-01")
   timeStampH <- strftime(timeStamp, "%d/%m/%Y %H:%M:%S", tz="GMT") 
   
   # NOTE: Not the actual difficulty but the difficulty bits representing difficulty
   # To see how to convert that number (difficulty bits) into difficulty, see https://en.bitcoin.it/wiki/Difficulty 
-  diffVect  <- rev(blkHeader[73:76])
-  difficulty <- paste(diffVect, collapse="")
+  #diffVect  <- rev(blkHeader[73:76])
+  difficulty <- paste(rev(blkHeader[73:76]), collapse="")
   
   
   # Chop off nonce (i.e. the value that miners search for in order to solve the hash puzzle)
-  nonceVec <- rev(blkHeader[77:80])
-  nonce <- paste(nonceVec, collapse="")
+  #nonceVec <- rev(blkHeader[77:80])
+  nonce <- paste(rev(blkHeader[77:80]), collapse="")
   
   # Number of transactions in this block
   txCount<- -2
@@ -1191,7 +1191,7 @@ setLevel(debugLevel, container='btc.bcreader')
 #Get all .dat files from blockchain directory
 # IMPORTANT: Change path to point to the directory on your system where the .dat files rely
 blockchainFiles<-sort(list.files("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\", full.names=TRUE, ignore.case=TRUE), decreasing=FALSE) 
-
+ 
 # Process each .dat file
 for (bcFile in blockchainFiles){
   
@@ -1201,7 +1201,7 @@ for (bcFile in blockchainFiles){
 }
 
 
-readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",20)
+readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",50)
 
 
 

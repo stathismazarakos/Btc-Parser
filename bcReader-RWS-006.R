@@ -513,6 +513,10 @@ readBlockChainFile<-function(blockfile, maxBlocks=-1L){
     blockCounter<-blockCounter + 1
     
     
+    ##BLOCK TIME
+    
+    
+    write.table(c(aBlock$blockTime,"***********"),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
     
     
     
@@ -542,6 +546,12 @@ readBlockChainFile<-function(blockfile, maxBlocks=-1L){
              FEE
              
              
+             
+             
+             
+             
+             
+             
              # Add the newly extracted transactions into the registry in order to look them up later, when needed
              # We use the transaction hash as the key and store the entire transaction
              
@@ -551,7 +561,7 @@ readBlockChainFile<-function(blockfile, maxBlocks=-1L){
              ##WRITE CSV?
              
              #in transaction loop
-             write.table(data.frame(FEE$TransFee,FEE$TransOutput),file = "skata.csv",col.names = F,append = T)
+             write.table(data.frame(FEE$TransFee,FEE$TransOutput),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
              
              
              
@@ -1194,7 +1204,7 @@ btcL$addHandler(writeToFile, logger='btc.bcreader', file="C:\\Users\\stathis\\De
 # DEBUG, INFO, WARN, ERROR.  Setting it to DEBUG means print 
 # all messages. Setting it to INFO means show INFO, WARN and ERROR messages i.e. no DEBUG.
 # Setting it to WARN, only WARN and ERROR messages will be shown/logged
-debugLevel = 'INFO'
+debugLevel = 'WARN'
 setLevel(debugLevel, container='btc.bcreader')
 
 
@@ -1224,7 +1234,7 @@ for (bcFile in blockchainFiles){
 }
 
 
-readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",3)
+readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",60)
 
 
 

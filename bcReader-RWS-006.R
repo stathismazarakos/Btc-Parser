@@ -538,12 +538,26 @@ readBlockChainFile<-function(blockfile, maxBlocks=-1L){
              logdebug("%d) Tx hash: [%s] Inputs:[%d] Outputs:[%d]", i,aBlock$transactions[[i]]$txHash, length( aBlock$transactions[[i]]$txInputs ), length( aBlock$transactions[[i]]$txOutputs ), logger='btc.bcreader')
              
              
-             handleTx(aBlock$transactions[[i]], blockChainInfo$txRegistry, blockChainInfo$statistics)
+             FEE<-handleTx(aBlock$transactions[[i]], blockChainInfo$txRegistry, blockChainInfo$statistics)
+             FEE
+             
              
              # Add the newly extracted transactions into the registry in order to look them up later, when needed
              # We use the transaction hash as the key and store the entire transaction
              
              blockChainInfo$txRegistry[[aBlock$transactions[[i]]$txHash]] <-aBlock$transactions[[i]]
+             
+             
+             ##WRITE CSV?
+             
+             #in transaction loop
+             write.table(data.frame(FEE$TransFee,FEE$TransOutput),file = "skata.csv",col.names = F,append = T)
+             
+             
+             
+             
+             
+             
              
              # We pint out some stats of the registry that contains all encountered transactions
              # This is done just to see how the registry can be managed
@@ -670,6 +684,10 @@ readBlock<-function(f){
     # NOTE:  index k is important!
     txn<-readTx(f)
     #transactionHash<-sha256( sha256(txn$bytes) )
+    
+    ##WRITE CSV?
+    
+    
     
     #logdebug("Transaction BYTES: [%s]", paste(txn$bytes, collapse=""), logger='btc.bcreader')
     
@@ -1061,6 +1079,10 @@ handleTx<-function(tx, txRecord, txRS){
   feeAmount<-inputAmount - outputAmount
   logdebug(">>> Tx [%s] input amount: [%f] output amount [%f]. Fee amount [%f]", tx$txHash, inputAmount, outputAmount, feeAmount, logger='btc.bcreader')
   
+  
+  #return FEE
+  return(list("TransFees"=feeAmount,"TransOutput"=outputAmount))
+  
 }
 
 
@@ -1076,8 +1098,9 @@ execScript<-function(script){
     
     if (length(script) <= cpos)
       break
-    #Changelog
+    #Changelog added decScript to avoid calling h2d
     decScript<-h2d(script[cpos])
+    
     logdebug("Checking: [%s]", script[cpos], logger='btc.bcreader')
     if ( decScript>=1 &&  decScript<=75 ) {
       logdebug("byte data to push read: [%f]", decScript, logger='btc.bcreader')
@@ -1201,7 +1224,7 @@ for (bcFile in blockchainFiles){
 }
 
 
-readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",50)
+readBlockChainFile("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\blk00001.dat",3)
 
 
 

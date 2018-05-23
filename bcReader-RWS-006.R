@@ -516,81 +516,82 @@ readBlockChainFile<-function(blockfile, maxBlocks=-1L){
     ##BLOCK TIME
     
     
-    write.table(c(aBlock$blockTime,"***********"),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
+    write.table(matrix(aBlock$blockTime),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
     
     
     
-           # Display the block that we just red, to make sure everything is ok.
-           loginfo( "**********   NEW BLOCK %d (Height????: %d)  ********************", as.integer(blockCounter), as.integer(blockCounter-1), logger='btc.bcreader' )
-           loginfo("Magic number: %s", aBlock$magicNumber, logger='btc.bcreader')
-           loginfo("Block hash: %s", aBlock$calcBlockHash, logger='btc.bcreader')
-           loginfo("Block size: %d bytes", as.integer(aBlock$blockSize), logger='btc.bcreader')
-           loginfo("Block time: %s", aBlock$blockTime, logger='btc.bcreader')
-           loginfo("Previous Block hash: %s", aBlock$previousHash, logger='btc.bcreader')
-           loginfo("Nonce: %f", h2d(aBlock$nonce), logger='btc.bcreader') 
-           loginfo("Transaction count: %d ", as.integer(aBlock$TxCount), logger='btc.bcreader')
-           loginfo("Transaction count retrieved: %d ", length(aBlock$transactions), logger='btc.bcreader')
-           
-           # Update the statistics count of how many Tx were inside the block in the blockchaininfo object.
-           blockChainInfo$statistics$newTxs( length(aBlock$transactions) )
-           
-           #
-           # Iterate through all transactions found in the block
-           #
-           for (i in 1:length(aBlock$transactions) ){
-             #print( sprintf("    %d) Tx hash: [%s] Inputs:[%d] Outputs:[%d]", i,aBlock$transactions[[i]]$txHash, aBlock$transactions[[i]]$txInCount, aBlock$transactions[[i]]$txOutCount))
-             logdebug("%d) Tx hash: [%s] Inputs:[%d] Outputs:[%d]", i,aBlock$transactions[[i]]$txHash, length( aBlock$transactions[[i]]$txInputs ), length( aBlock$transactions[[i]]$txOutputs ), logger='btc.bcreader')
-             
-             
-             FEE<-handleTx(aBlock$transactions[[i]], blockChainInfo$txRegistry, blockChainInfo$statistics)
-             FEE
-             
-             
-             
-             
-             
-             
-             
-             
-             # Add the newly extracted transactions into the registry in order to look them up later, when needed
-             # We use the transaction hash as the key and store the entire transaction
-             
-             blockChainInfo$txRegistry[[aBlock$transactions[[i]]$txHash]] <-aBlock$transactions[[i]]
-             
-             
-             ##WRITE CSV?
-             
-             #in transaction loop
-             write.table(data.frame(FEE$TransFee,FEE$TransOutput),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
-             
-             
-             
-             
-             
-             
-             
-             # We pint out some stats of the registry that contains all encountered transactions
-             # This is done just to see how the registry can be managed
-             # TODO: not sure how to tackle that issue; need to read documentation
-             hE <- env.profile(blockChainInfo$txRegistry)
-             logdebug("HashMap Size=%d Count=%d", hE$size, hE$nchains, logger='btc.bcreader')
-           }
-           #print("*******************************************")
-           
-           # Here we update some statistics. 
-           # check here if the number of transactions found in the block is the largest seen
-           blockChainInfo$statistics$checkMaxBlockTxCount(as.integer(aBlock$TxCount) )
-           
-           
-           # Have we reached maximum number of blocks to read? If so, stop.
-           # TODO: do we need as.interger() casting? I don't think so.
-           if ( as.integer(maxBlocks) > 0 ) {
-             if ( blockCounter >= as.integer(maxBlocks) ){
-               loginfo("Maximum number of blocks %d seen. Stopping", maxBlocks, logger='btc.bcreader')
-               break # Bailout of while loop
-             }
-           }
-           
+    # Display the block that we just red, to make sure everything is ok.
+    loginfo( "**********   NEW BLOCK %d (Height????: %d)  ********************", as.integer(blockCounter), as.integer(blockCounter-1), logger='btc.bcreader' )
+    loginfo("Magic number: %s", aBlock$magicNumber, logger='btc.bcreader')
+    loginfo("Block hash: %s", aBlock$calcBlockHash, logger='btc.bcreader')
+    loginfo("Block size: %d bytes", as.integer(aBlock$blockSize), logger='btc.bcreader')
+    loginfo("Block time: %s", aBlock$blockTime, logger='btc.bcreader')
+    loginfo("Previous Block hash: %s", aBlock$previousHash, logger='btc.bcreader')
+    loginfo("Nonce: %f", h2d(aBlock$nonce), logger='btc.bcreader') 
+    loginfo("Transaction count: %d ", as.integer(aBlock$TxCount), logger='btc.bcreader')
+    loginfo("Transaction count retrieved: %d ", length(aBlock$transactions), logger='btc.bcreader')
+    
+    # Update the statistics count of how many Tx were inside the block in the blockchaininfo object.
+    blockChainInfo$statistics$newTxs( length(aBlock$transactions) )
+    
+    #
+    # Iterate through all transactions found in the block
+    #
+    for (i in 1:length(aBlock$transactions) ){
+      #print( sprintf("    %d) Tx hash: [%s] Inputs:[%d] Outputs:[%d]", i,aBlock$transactions[[i]]$txHash, aBlock$transactions[[i]]$txInCount, aBlock$transactions[[i]]$txOutCount))
+      logdebug("%d) Tx hash: [%s] Inputs:[%d] Outputs:[%d]", i,aBlock$transactions[[i]]$txHash, length( aBlock$transactions[[i]]$txInputs ), length( aBlock$transactions[[i]]$txOutputs ), logger='btc.bcreader')
+      
+      
+      FEE<-handleTx(aBlock$transactions[[i]], blockChainInfo$txRegistry, blockChainInfo$statistics)
+      FEE
+      
+      
+      
+      
+      
+      
+      
+      
+      # Add the newly extracted transactions into the registry in order to look them up later, when needed
+      # We use the transaction hash as the key and store the entire transaction
+      
+      blockChainInfo$txRegistry[[aBlock$transactions[[i]]$txHash]] <-aBlock$transactions[[i]]
+      
+      
+      ##WRITE CSV?
+      
+      #in transaction loop
+      if(is.null(FEE)==FALSE){
+      write.table(matrix(FEE,ncol = 2),file = "CSVFILE.csv",append = T,col.names = F,sep = ",")
+      }
+      
+      
+      
+      
+      
+      
+      # We pint out some stats of the registry that contains all encountered transactions
+      # This is done just to see how the registry can be managed
+      # TODO: not sure how to tackle that issue; need to read documentation
+      hE <- env.profile(blockChainInfo$txRegistry)
+      logdebug("HashMap Size=%d Count=%d", hE$size, hE$nchains, logger='btc.bcreader')
+    }
+    #print("*******************************************")
+    
+    # Here we update some statistics. 
+    # check here if the number of transactions found in the block is the largest seen
+    blockChainInfo$statistics$checkMaxBlockTxCount(as.integer(aBlock$TxCount) )
+    
+    
+    # Have we reached maximum number of blocks to read? If so, stop.
+    # TODO: do we need as.interger() casting? I don't think so.
+    if ( as.integer(maxBlocks) > 0 ) {
+      if ( blockCounter >= as.integer(maxBlocks) ){
+        loginfo("Maximum number of blocks %d seen. Stopping", maxBlocks, logger='btc.bcreader')
+        break # Bailout of while loop
+      }
+    }
+    
   } # while
   
   
@@ -658,8 +659,8 @@ readBlock<-function(f){
   
   # Did we reach end of file?
   if ( length(m) == 0 ){
-       logwarn("No more blocks present. ")
-       return( list() ) #return an empty list
+    logwarn("No more blocks present. ")
+    return( list() ) #return an empty list
   }
   
   
@@ -1224,7 +1225,7 @@ setLevel(debugLevel, container='btc.bcreader')
 #Get all .dat files from blockchain directory
 # IMPORTANT: Change path to point to the directory on your system where the .dat files rely
 blockchainFiles<-sort(list.files("C:\\Users\\stathis\\Desktop\\diplwmatikh\\Blockchain-files\\", full.names=TRUE, ignore.case=TRUE), decreasing=FALSE) 
- 
+
 # Process each .dat file
 for (bcFile in blockchainFiles){
   

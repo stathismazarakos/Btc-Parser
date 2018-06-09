@@ -54,7 +54,7 @@
 ########################################################################################
 
 
-
+install.packages("RSQLite")
 
 
 
@@ -302,14 +302,14 @@ readVariantInteger<-function(f){
   
   # Read first byte. This will tell us how many next bytes to read    
   rawvec <-readBytes(f, 1)[1]
-  rbits<-rawToBits(rawvec)
+  #rbits<-rawToBits(rawvec)
   sz<-sum(2^.subset(0:7, as.logical(rawToBits(rawvec))))
   
   vBytes<-c(rawvec)
   
   # TODO: better way than h2d("fd") to avoid function call? i.e. check to see if
   # comparing integers and hexadecimals like this sz < 0xfd is possible in R (it should, but need to make sure).
-  if (sz < h2d("fd") ){
+  if (sz < 0xfd ){
     return( list("int"=sz, "bytes"=vBytes) )
   } else {
     if (sz == h2d("fd"))  {
@@ -319,31 +319,31 @@ readVariantInteger<-function(f){
       nSz<-sum(2^.subset(0:15, as.logical(rawToBits(tmpSz))))
       
       # TODO: Remove the next lines
-      tmpSz <- raw2hex( rev(tmpSz) )
-      tmpSz<-h2d( paste(tmpSz, collapse="") )
+      #tmpSz <- raw2hex( rev(tmpSz) )
+      #tmpSz<-h2d( paste(tmpSz, collapse="") )
       
       return (  list("int"=nSz, "bytes"=vBytes) )
       
-    } else if (sz == h2d("fe")){
+    } else if (sz == 0xfe){
       tmpSz <- readBytes(f, 4)
       vBytes<-c(vBytes, tmpSz)
       
-      rbits<-rawToBits( rev(tmpSz))
+      #rbits<-rawToBits( rev(tmpSz))
       # Convert 32-bit binary integer into decimal
-      nSz<-sum(2^.subset(0:31, as.logical(rawToBits(rbits))))
+      nSz<-sum(2^.subset(0:31, as.logical(rawToBits(rawToBits( rev(tmpSz))))))
       
       # TODO: Remove the next lines
-      tmpSz <- raw2hex( rev(tmpSz) )
-      tmpSz<-h2d( paste(tmpSz, collapse="") )
+      #tmpSz <- raw2hex( rev(tmpSz) )
+      #tmpSz<-h2d( paste(tmpSz, collapse="") )
       
       return (  list("int"=nSz, "bytes"=vBytes) )
       
-    } else if (sz == h2d("ff")) {
+    } else if (sz == 0xff) {
       tmpSz <- readBytes(f, 8)
       vBytes<-c(vBytes, tmpSz)
-      rbits<-rawToBits( rev(tmpSz) )
+      #rbits<-rawToBits( rev(tmpSz) )
       # Convert 64-bit binary integer into decimal
-      nSz<-sum(2^.subset(0:63, as.logical(rawToBits(rbits))))
+      nSz<-sum(2^.subset(0:63, as.logical(rawToBits(rawToBits( rev(tmpSz) )))))
       return (  list("int"=nSz, "bytes"=vBytes) )
     }
   }
@@ -929,41 +929,41 @@ readHeader<-function(f){
   # Chop off version
   # Reverse bits because of little-endian format 
   # For more on the endianness discussion see https://el.wikipedia.org/wiki/Endianness
-  vVec <- rev(blkHeader[1:4])
-  version<-paste(vVec, collapse="")
+  #vVec <- rev(blkHeader[1:4])
+  version<-paste(rev(blkHeader[1:4]), collapse="")
   
   # Chop off previous hash
   # Reverse bits because of little-endian format
-  prVec <- rev(blkHeader[5:36])
-  previousHash <- paste(prVec, collapse="")
+  #prVec <- rev(blkHeader[5:36])
+  previousHash <- paste(rev(blkHeader[5:36]), collapse="")
   
   # Chop off merkle hash
   # Reverse bits because of little-endian format
-  mrklVec <- rev(blkHeader[37:68])
-  merkleRoot <- paste(mrklVec, collapse="")
+  #mrklVec <- rev(blkHeader[37:68])
+  merkleRoot <- paste(rev(blkHeader[37:68]), collapse="")
   
   logdebug("Merkle root: [%s]", paste(merkleRoot, collapse=""), logger='btc.bcreader')
   
   # Chop off block timestamp
   # We reverse the timestamp bits because integers are stored in little-endian format
-  tmVec <-rev(blkHeader[69:72])
+  #tmVec <-rev(blkHeader[69:72])
   
   # Chop off timestamp
   # The block's timestamp (=when it was created) is an integer representing an Unix timestamp (see https://en.wikipedia.org/wiki/Unix_time) 
   # This integer is the time elapsed in seconds from 01-01-1970, a date known as "the Epoch"
   # So here we convert the Unix timestamp integer into a datetime. The block reports the timestamp in GMT, hence we do the same here.
-  timeStamp <- as.POSIXct( hex2dec(paste(tmVec, collapse="")), origin="1970-01-01")
+  timeStamp <- as.POSIXct( hex2dec(paste(rev(blkHeader[69:72]), collapse="")), origin="1970-01-01")
   timeStampH <- strftime(timeStamp, "%d/%m/%Y %H:%M:%S", tz="GMT") 
   
   # NOTE: Not the actual difficulty but the difficulty bits representing difficulty
   # To see how to convert that number (difficulty bits) into difficulty, see https://en.bitcoin.it/wiki/Difficulty 
-  diffVect  <- rev(blkHeader[73:76])
-  difficulty <- paste(diffVect, collapse="")
+  #diffVect  <- rev(blkHeader[73:76])
+  difficulty <- paste(rev(blkHeader[73:76]), collapse="")
   
   
   # Chop off nonce (i.e. the value that miners search for in order to solve the hash puzzle)
-  nonceVec <- rev(blkHeader[77:80])
-  nonce <- paste(nonceVec, collapse="")
+  #nonceVec <- rev(blkHeader[77:80])
+  nonce <- paste(rev(blkHeader[77:80]), collapse="")
   
   # Number of transactions in this block
   txCount<- -2
@@ -1548,14 +1548,15 @@ execScript<-function(script){
     if (length(script) <= cpos)
       break
     
+    decScript<-h2d(script[cpos])
+    
     logdebug("Checking: [%s]", script[cpos], logger='btc.bcreader')
-    if ( h2d(script[cpos])>=1 &&  h2d(script[cpos])<=75 ) {
-      logdebug("byte data to push read: [%f]", h2d(script[cpos]), logger='btc.bcreader')
-      address<-script[cpos+1:(cpos+as.integer(h2d(script[cpos])) -1)]
-      #logdebug(">>>address: [%s]", paste(address, collapse=""), logger='btc.bcreader')
-      
-      cpos<-cpos+h2d(script[cpos])
-      return( list("txType"="NONSTD", "txHashedAddress"=paste(address, collapse="")) )
+    if ( decScript>=1 &&  decScript<=75 ) {
+      logdebug("byte data to push read: [%f]", decScript, logger='btc.bcreader')
+      address<-script[cpos+1:(cpos+as.integer(decScript) -1)]
+      logdebug(">>>address: [%s]", paste(address, collapse=""), logger='btc.bcreader')
+      cpos<-cpos+decScript
+      return()
     } else {
       switch( as.character(script[cpos]),
               
